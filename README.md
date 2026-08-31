@@ -96,6 +96,20 @@ what the panel runs:
 Bluetooth connection, to whichever client holds the channel then — a second
 client reads mostly `null`.
 
+The bar starts one `watch` for each monitor, and the AirPods answer only the
+first client. The copy that binds the abstract socket `omarchy-airpods` opens
+the channel; the others connect to it, print the lines it sends, and forward
+their commands to it. That keeps the widget alive on every monitor. To see a
+mirror at work, run a copy by hand while the bar runs and keep its stdin open:
+
+```bash
+sleep 30 | ~/.config/omarchy/plugins/soup.airpods/bin/airpods watch
+```
+
+It prints the same lines as the bar. A copy started with stdin closed (from
+`/dev/null`, for example) exits immediately, because an empty read means the
+caller went away.
+
 A `null` value means the device has not reported it; the panel shows `—` or
 a dim control. Putting one pod in the case disconnects the other pod, so
 the panel can go quiet mid-use.

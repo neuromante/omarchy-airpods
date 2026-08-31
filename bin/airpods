@@ -29,6 +29,8 @@ import sys
 import time
 
 PSM = 0x1001
+# Abstract socket: exactly one copy binds it, and it owns the channel.
+LOCK = "\0omarchy-airpods"
 HEADER = bytes([0x04, 0x00, 0x04, 0x00])
 HANDSHAKE = bytes([0x00, 0x00, 0x04, 0x00, 0x01, 0x00, 0x02, 0x00] + [0x00] * 8)
 NOTIFICATIONS = HEADER + bytes([0x0F, 0x00, 0xFF, 0xFF, 0xFF, 0xFF])
@@ -144,12 +146,81 @@ def send_command(sock, state, key, value):
         state["adaptive_level"] = int(value)
 
 
+def apply_commands(sock, state, blob):
+    """Apply every `key value` pair in one write. An empty write means EOF."""
+    if not blob:
+        raise SystemExit(0)
+    words = blob.decode().split()
+    for key, value in zip(words[::2], words[1::2]):
+        send_command(sock, state, key, value)
+
+
 def watch():
-    """Hold the channel open and print a JSON line whenever the state changes."""
+    """Print a JSON line per change, from one channel however many bars run.
+
+    Each bar starts its own copy, one per monitor, and the AirPods answer only
+    the first client on the channel. The copy that binds the abstract socket
+    reads the AirPods. The others mirror its lines and send it their commands.
+    """
+    while True:
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            server.bind(LOCK)
+            server.listen()
+        except OSError:
+            server.close()
+            mirror()
+            continue
+        with server:
+            own(server)
+
+
+def mirror():
+    """Relay the owner's lines to stdout, and this copy's commands to it."""
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.connect(LOCK)
+    except OSError:
+        time.sleep(1)  # the owner left between the failed bind and this connect
+        return
+    with sock:
+        while True:
+            for source in select.select([sock, 0], [], [])[0]:
+                if source is sock:
+                    lines = sock.recv(4096)
+                    if not lines:
+                        return  # the owner went away, so try to become it
+                    sys.stdout.write(lines.decode())
+                    sys.stdout.flush()
+                    continue
+                command = os.read(0, 4096)
+                if not command:
+                    raise SystemExit(0)  # the caller went away
+                sock.sendall(command)
+
+
+def own(server):
+    """Hold the channel open and feed this copy's caller and every mirror."""
+    clients = []
+    last = ""
+
+    def emit(line):
+        nonlocal last
+        if line == last:
+            return
+        last = line
+        print(line, flush=True)
+        for client in list(clients):
+            try:
+                client.sendall((line + "\n").encode())
+            except OSError:
+                clients.remove(client)
+                client.close()
+
     while True:
         address = connected_address()
         if not address:
-            print(json.dumps({"connected": False}), flush=True)
+            emit(json.dumps({"connected": False}))
             time.sleep(5)
             continue
         try:
@@ -162,32 +233,37 @@ def watch():
                 state = {"connected": True, "address": address, "name": None,
                          "model": None, "mode": None, "battery": {}, "charging": {},
                          "ear": None, "ca": None, "onebud": None, "adaptive_level": None}
-                last = ""
                 while True:
                     # Read the file descriptor, not sys.stdin: a buffered read
                     # would strand a second mode name that arrived in the same
                     # write, because select only ever sees the descriptor.
-                    ready = select.select([sock, 0], [], [])[0]
+                    ready = select.select([sock, 0, server] + clients, [], [])[0]
                     for source in ready:
                         if source is sock:
                             packet = sock.recv(1024)
                             if not packet:
                                 raise OSError("channel closed")
                             parse(packet, state)
-                            continue
-                        command = os.read(0, 4096)
-                        if not command:
-                            return  # the caller went away
-                        words = command.decode().split()
-                        for key, value in zip(words[::2], words[1::2]):
-                            send_command(sock, state, key, value)
-                    line = json.dumps(state)
-                    if line != last:
-                        print(line, flush=True)
-                        last = line
+                        elif source is server:
+                            client = server.accept()[0]
+                            clients.append(client)
+                            # A mirror that joins between changes would sit
+                            # blank until the next one, so send the last line.
+                            if last:
+                                client.sendall((last + "\n").encode())
+                        elif source == 0:
+                            apply_commands(sock, state, os.read(0, 4096))
+                        else:
+                            command = source.recv(4096)
+                            if not command:
+                                clients.remove(source)
+                                source.close()
+                                continue
+                            apply_commands(sock, state, command)
+                    emit(json.dumps(state))
         except OSError:
             pass
-        print(json.dumps({"connected": False}), flush=True)
+        emit(json.dumps({"connected": False}))
         time.sleep(5)
 
 
