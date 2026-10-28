@@ -70,12 +70,18 @@ Panel {
   // AirPods Pro 3 (A3063-A3066, A3334-A3336) has no Off mode.
   readonly property var pro3Models: ["A3063", "A3064", "A3065", "A3066",
                                      "A3334", "A3335", "A3336"]
+  // AirPods Pro (1st generation, A2083/A2084) has no Adaptive mode.
+  readonly property var pro1Models: ["A2083", "A2084"]
   readonly property var modeOptions: [
     { value: "off", label: "Off" },
     { value: "transparency", label: "Transparency" },
     { value: "adaptive", label: "Adaptive" },
     { value: "anc", label: "ANC" }
-  ].slice(pro3Models.indexOf(model) < 0 ? 0 : 1)
+  ].filter(function (option) {
+    if (option.value === "off") return pro3Models.indexOf(model) < 0
+    if (option.value === "adaptive") return pro1Models.indexOf(model) < 0
+    return true
+  })
 
   readonly property int lowestBattery: {
     var levels = []
@@ -419,7 +425,9 @@ Panel {
             text: "Controls"
           }
 
+          // Pro 1 never reports Conversation Awareness, so hide the row.
           SettingRow {
+            visible: root.conversationAwareness !== null
             label: "Conversation Awareness"
             checked: root.conversationAwareness === true
             enabled: root.conversationAwareness !== null

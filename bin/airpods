@@ -129,8 +129,8 @@ def control(identifier, value):
 def send_command(sock, state, key, value):
     """Apply one `key value` command. Unknown keys and values are ignored.
 
-    The AirPods never echo control writes back, so record the value here;
-    the next connection's dump corrects drift.
+    Mode writes are echoed back (seen on Pro 1), but record the value here
+    too; the next connection's dump corrects drift.
     """
     if key == "mode" and value in MODES:
         sock.send(control(LISTENING_MODE, MODES[value]))
@@ -315,6 +315,13 @@ def selftest():
                         + "00" + b"A3064".hex() + "00" + b"Apple Inc.".hex()), state)
     assert state["name"] == "Anders’s AirPods Pro Gen 3", state
     assert state["model"] == "A3064", state
+    # AirPods Pro 1 (A2084) on a fresh state: name, model, and the
+    # manufacturer and serial fields that must stay out of the output.
+    pro1 = {"battery": {}, "charging": {}, "mode": None, "ear": None, "ca": None,
+            "onebud": None, "adaptive_level": None}
+    parse(bytes.fromhex("040004001d0002cc000d00416972506f64732050726f206469204c6f72656e7a6f004132303834004170706c6520496e632e004833314758504347313035390035312e392e360035312e392e3600312e302e3000636f6d2e6170706c652e6163636573736f72792e757064617465722e6170702e36302d414e4300474e3347563750463043364b0047583647544d36533043364a003333343436343600353c10d1d8af27bb9dd8980443407b19e067cf4f7e8ede4d951e5a20fe859e2dfa3531363439383730323031003136343938373032303100"), pro1)
+    assert pro1["name"] == "AirPods Pro di Lorenzo", pro1
+    assert pro1["model"] == "A2084", pro1
     parse(bytes.fromhex("04000400080002000100"), state)  # unknown opcode
 
     sent = []

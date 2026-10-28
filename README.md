@@ -145,6 +145,9 @@ AirPods Pro 2 (models A3047 and A3048) and AirPods Pro 3 (model A3064) on
 Omarchy 4, BlueZ 5.87. Other AirPods models use the same protocol, but they
 are not tested. Reports are welcome.
 
+AirPods Pro 1st gen (A2084): battery, ear detection, Off/ANC/Transparency,
+One-Bud ANC; no Adaptive and no Conversation Awareness.
+
 ## Development
 
 A widget on the bar keeps the QML it loaded. After an edit, run:
@@ -159,8 +162,9 @@ omarchy restart shell
 asks for the feature flags and the notification stream. The AirPods answer
 with metadata, battery, and control packets. Writing a control is one
 command packet on the same channel, which is why `watch` reads commands
-from stdin. The AirPods never echo a control write back to the sender, so
-`watch` keeps the value it sent until the next connection's dump corrects it.
+from stdin. Mode writes are echoed back by the device (observed on Pro 1),
+and the script also records the value locally, so `watch` keeps the value it
+sent until the next connection's dump corrects it.
 
 ## Credit
 
