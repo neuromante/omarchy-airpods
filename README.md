@@ -145,8 +145,9 @@ AirPods Pro 2 (models A3047 and A3048) and AirPods Pro 3 (model A3064) on
 Omarchy 4, BlueZ 5.87. Other AirPods models use the same protocol, but they
 are not tested. Reports are welcome.
 
-AirPods Pro 1st gen (A2084): battery, ear detection, Off/ANC/Transparency,
-One-Bud ANC; no Adaptive and no Conversation Awareness.
+AirPods Pro 1st gen (A2084): battery, ear detection, auto-pause, Off/ANC/
+Transparency, One-Bud ANC; no Adaptive and no Conversation Awareness. The
+pods acknowledge every mode change; how much ANC isolates was not measured.
 
 ## Development
 
