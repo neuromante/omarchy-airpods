@@ -22,6 +22,7 @@
 #   airpods selftest                            parse check, no Bluetooth
 import json
 import os
+import re
 import select
 import socket
 import subprocess
@@ -55,14 +56,26 @@ EAR_STATES = {0x00: "in_ear", 0x01: "out_of_ear", 0x02: "in_case", 0x03: "discon
 
 
 def connected_address():
-    """MAC of the first connected AirPods, or None."""
+    """MAC of the first connected AirPods, or None.
+
+    A device counts when its name says AirPods or, for a renamed pair, when
+    its Modalias is Apple vendor 004C with a 2xxx product (the AirPods range).
+    """
     out = subprocess.run(
         ["bluetoothctl", "devices", "Connected"],
         capture_output=True, text=True,
     ).stdout
     for line in out.splitlines():
         parts = line.split(None, 2)
-        if len(parts) == 3 and "airpods" in parts[2].lower():
+        if len(parts) != 3:
+            continue
+        if "airpods" in parts[2].lower():
+            return parts[1]
+        info = subprocess.run(
+            ["bluetoothctl", "info", parts[1]],
+            capture_output=True, text=True,
+        ).stdout
+        if re.search(r"Modalias: bluetooth:v004Cp2", info, re.IGNORECASE):
             return parts[1]
     return None
 
@@ -150,7 +163,7 @@ def apply_commands(sock, state, blob):
     """Apply every `key value` pair in one write. An empty write means EOF."""
     if not blob:
         raise SystemExit(0)
-    words = blob.decode().split()
+    words = blob.decode(errors="replace").split()
     for key, value in zip(words[::2], words[1::2]):
         send_command(sock, state, key, value)
 
